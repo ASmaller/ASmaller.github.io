@@ -1,1 +1,327 @@
-Hello World!
+#include <Arduino.h>
+const char login_html[] PROGMEM = R"rawliteral(
+<!DOCTYPE HTML><html>
+<head>
+  <title>ESP Web Server Login</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+  /*STYLE*/
+  </style>
+<title>ESP Web Server Login</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+</head>
+<body>
+  <p>LOGGA IN!!! >:(</p>
+  <input type="text" id="inputPassword"></input>
+  <p><button id="button" class="button">LOGIN</button></p>
+  <script>
+  window.addEventListener('load', initButton);
+  function initButton() {
+      document.getElementById('button').addEventListener('click', loginFunc); //Checks if the button is clicked
+    }
+    function loginFunc(){
+      sessionStorage.setItem("key", document.getElementById('inputPassword').value);
+      window.location.assign("../");
+    }
+  </script>
+</body>
+</html>
+)rawliteral";
+
+const char index_html[] PROGMEM = R"rawliteral(
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LARCA</title> <!--L(ong) A(ir) R(ange) C(ommunication) A(rray) -->
+</head>
+<body>
+  <nav>
+    <ul id="topNav">
+      <li><a href="#send">Send & Recieve</a></li>
+      <li style="float:right"><a onclick="toggleSettings()">Settings</a>
+      </li>
+    </ul>
+  </nav>
+  <div id="settingsDiv">
+    <ul>
+      <div>
+        <li class="inputHeading">SSID: (0-32 characters)
+        <li><input type="text" maxlength="32" class="input" id="SSIDInput" value="LARCANODE"></li>
+      </div>
+      <div>
+        <li class="inputHeading">WiFi Password: (8-32 characters)</li>
+        <li><input type="text" minlength="8" maxlength="32" class="input" id="WiFiPasswordInput" value="LORA1234"></li>
+      </div>
+      <div>
+        <li class="inputHeading">LoRa Name: (4 characters)</li>
+        <li><input type="text"  maxlength="4" class="input" id="LoRaNameInput" value="LADF"></li>
+      </div>
+      <div>
+        <li class="inputHeading">AP or WiFi: </li>
+      <li>
+        <input type="radio" id="AP" name="APOrWiFiRadio" value="A">
+        <label for="AP">Access Point</label>
+        <input type="radio" id="WiFi" name="APOrWiFiRadio" value="W">
+        <label for="WiFi">WiFi Station</label>
+      </li>
+      </div>
+      <div>
+        <li class="inputHeading">Site password: (Max 16 characters)</li>
+        <li><input type="text"  maxlength="16" class="input" id="sitePasswordInput" value="LORASETUP"></li>
+      </div>
+      <li><input type="button" class="button" value="Commit" onclick="checkSettingsContent()"></li>
+    </ul>
+  </div>
+  <main>
+    <div id="sendDiv">
+      <ul>
+        <h1>Send a packet</h1>
+        <li class="inputHeading">Sender</li>
+        <li><input type="text" class="input" disabled="disabled" id="senderInput" maxlength="4"></li>
+        <li class="inputHeading">Target: </li>
+        <li><input type="text" class="input" id="targetInput" maxlength="4"></li>
+        <li class="inputHeading">Function: </li>
+        <li><input type="text" class="input" id="functionInput" maxlength="2"></li>
+        <li class="inputHeading">Parameters: </li>
+        <li><input type="text" class="input" id="parametersInput"></li>
+        <li class="inputHeading">Content: </li>
+        <li><input type="text" class="input" id="contentInput"></li>
+        <li><input type="button" class="button" value="Send packet" onclick="checkPacketContent()"></li>
+        <br>
+        <h2 class="inputHeading">Assembled packet:</h2>
+        <p class="output" id="functionOutput">
+
+        </p>
+      </ul>
+    </div>
+    <div id="recieveDiv">
+      <h2>Recieved message:</h2>
+      <p id="recievedMessage"></p>
+    </div>
+  </main>
+<script>
+var terminatingChar = '+';
+var SSID = "LARCANODE";
+var WiFiPass = "LORA1234";
+var LoRaName = "LADF";
+var APorWiFiSetting = "A";
+var sitePass = "LORASETUP";
+
+var gateway = `ws://${window.location.hostname}/ws`;
+var websocket;
+window.addEventListener('load', onLoad);
+function initWebSocket() {
+  console.log('Trying to open a WebSocket connection...');
+  websocket = new WebSocket(gateway);
+  websocket.onopen    = onOpen; //When a connection is opened
+  websocket.onclose   = onClose; //When a connection is closed
+  websocket.onmessage = onMessage; // When data is recieved by the client
+}
+
+function onOpen(event) {
+  console.log('Connection opened');
+  websocket.send(sessionStorage.getItem("key"));
+}
+function onClose(event) {
+  console.log('Connection closed');
+  setTimeout(initWebSocket, 2000);
+}
+function onMessage(event) { //'event' = recieved message
+  console.log(event);
+  if (event.data == "AuthFail")
+    window.location.assign("/login");
+  //else if (event.data.substring(0, 14) === settingsChange) {
+    //updateSettings();
+  //}
+  else document.getElementById("recievedMessage").innerHTML = event.data;
+  console.log(event.data);
+  console.log(event.data.substring(0, event.data.indexOf(",")));
+  if (event.data.substring(0, event.data.indexOf(",")) == "SettingsInfo") {
+    console.log("It ran! :) ");
+    const settings = event.data.split(',');
+    console.log(settings);
+    SSID = settings[1];
+    WiFiPass = settings[2];
+    LoRaName = settings[3];
+    APorWiFiSetting = settings[4];
+    sitePass = settings[5];
+    updateSettings();
+  }
+}
+function onLoad(event) {  //Runs afer page has been loaded
+  initWebSocket();
+  updateSettings();
+}
+
+function updateSettings () {
+  document.getElementById('senderInput').value = LoRaName;
+  document.getElementById('SSIDInput').value = SSID;
+  document.getElementById('WiFiPasswordInput').value = WiFiPass;
+  document.getElementById('LoRaNameInput').value = LoRaName;
+
+  if (APorWiFiSetting === "A") {
+    document.getElementById('AP').checked = true;
+    document.getElementById('WiFi').checked = false;
+  } else if (APorWiFiSetting === "W") {
+    document.getElementById('WiFi').checked = true;
+    document.getElementById('AP').checked = false;
+  }
+
+  document.getElementById('sitePasswordInput').value = sitePass;
+}
+
+function checkPacketContent() {
+  var senderInput = document.getElementById("senderInput").value;
+  var targetInput = document.getElementById("targetInput").value;
+  var functionInput = document.getElementById("functionInput").value;
+  var parametersInput = document.getElementById("parametersInput").value;
+  var contentInput = document.getElementById("contentInput").value;
+  if (senderInput == "" || targetInput == "" || functionInput == "" || parametersInput == "" || contentInput == "")
+    alert('All text fields must be filled!');
+  else {
+    var packetToSend = senderInput + targetInput + functionInput + parametersInput + contentInput;
+    document.getElementById("functionOutput").innerHTML = packetToSend;
+    sendPacket(packetToSend);
+  }
+}
+
+function checkSettingsContent() {
+  var SSIDInput = document.getElementById("SSIDInput").value;
+  var WiFiPasswordInput = document.getElementById("WiFiPasswordInput").value;
+  var LoRaNameInput = document.getElementById("LoRaNameInput").value;
+  var APOrWiFIInput = document.querySelector('input[name="APOrWiFiRadio"]:checked').value;
+  var sitePasswordInput = document.getElementById("sitePasswordInput").value;
+
+  /*
+  SSID/Networkname = 32 Char
+  SSIDPASS = 32 Char
+  LORANAME = 4Char
+  APOrWifi = 1Char = (A or W) (uppercase!)
+  SitePass = 16Char
+  */
+
+  if (SSIDInput == "" || WiFiPasswordInput == "" || LoRaNameInput == "" || APOrWiFIInput == "" || sitePasswordInput == "")
+    alert('All fields must be filled!');
+  else var settingsToSend = SSIDInput + WiFiPasswordInput + LoRaNameInput + APOrWiFIInput + sitePasswordInput;
+  
+  
+  if (settingsToSend.includes('?') || settingsToSend.includes('"') || settingsToSend.includes('$') || settingsToSend.includes('[') || settingsToSend.includes(']') || settingsToSend.includes('\\') || settingsToSend.includes('+'))
+    alert('Fields contained forbidden character(s): ?, ", $, [, \\, ], or +.');
+    else if (SSIDInput.length > 32 || WiFiPasswordInput.length > 32 || WiFiPasswordInput.length < 8 || LoRaNameInput.length != 4)
+      alert('One or more of the fields are too long or too short.');
+    else {
+      settingsToSend = SSIDInput + terminatingChar + WiFiPasswordInput + terminatingChar + LoRaNameInput + terminatingChar + APOrWiFIInput + terminatingChar + sitePasswordInput;
+      sendSettingsChange(settingsToSend);
+      document.getElementById("functionOutput").innerHTML = settingsToSend;
+  }
+}
+
+var settingsToggle = true;
+function toggleSettings () {
+  if (settingsToggle) {
+    document.getElementById('settingsDiv').style.display = 'block';
+    settingsToggle = !settingsToggle;
+  } else {
+    document.getElementById('settingsDiv').style.display = 'none';
+    settingsToggle = !settingsToggle;
+  }
+}
+
+function sendPacket(packet) {
+  if (packet.length > 256)
+    alert('The packet is too long to send.');
+    else {
+      console.log((sessionStorage.getItem('key') + 'loraSend' + packet)); //ADD TERMINATING CHAR IN SERVER
+      websocket.send(sessionStorage.getItem("key") + 'loraSend' + packet);
+  }
+}
+
+function sendSettingsChange(settings) {
+  if (settings.length > 256) alert('The packet is too long to send.');
+  else {
+    console.log((sessionStorage.getItem('key') + 'changeSettings' + terminatingChar + settings));
+    websocket.send(sessionStorage.getItem("key") + 'changeSettings' + terminatingChar + settings);
+  }
+}
+</script>
+<style>
+* {
+  margin: 0;
+  padding: 0;
+  list-style-type: none;
+  font-family: 'Lucida Sans';
+}
+
+input {
+  width: calc( 100% - 16px);
+  border: none;
+}
+
+input[type="radio"] {
+  width: 16px;
+}
+
+label {
+  user-select: none;
+  cursor: pointer;
+}
+
+#topNav {
+  overflow: hidden;
+  background-color: #333;
+}
+nav li {
+  float: left;
+  user-select: none;
+}
+nav li a {
+  display: block;
+  padding: 14px 16px;
+  color: white;
+  text-align: center;
+  text-decoration: none;
+}
+nav li a:hover {
+  background-color: #222;
+}
+
+.predefinedInput {
+  pointer-events: none;
+  color: lightgrey;
+}
+
+main {
+  background-color:#00989d;
+  height: calc(100vh - 46px);
+  padding-left: 16px;
+}
+
+#recieveDiv {
+  margin-top: 48px;
+}
+
+#settingsDiv {
+  display: none;
+  position: absolute;
+  border-style: solid;
+  border-color: #333;
+  border-top: none;
+  background-color: #2b6b99;
+  right: 0;
+  padding: 16px;
+}
+
+#settingsDiv div{
+  margin-bottom: 8px;
+  border-radius: 8px;
+  padding: 4px;
+  border-style: solid;
+}
+</style>
+</body>
+</html>
+)rawliteral";
